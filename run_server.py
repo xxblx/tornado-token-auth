@@ -1,13 +1,15 @@
-# -*- coding: utf-8 -*-
+#!/usr/bin/env python
+import logging
 
 import tornado.httpserver
 import tornado.ioloop
 
-from webapp.conf import HOST, PORT
 from webapp.app import Application
+from webapp.conf import HOST, PORT
 
 
 def main():
+    logging.basicConfig(level=logging.DEBUG)
 
     http_server = tornado.httpserver.HTTPServer(Application())
     http_server.listen(PORT, HOST)
