@@ -1,15 +1,16 @@
 # -*- coding: utf-8 -*-
 
-from uuid import uuid4
-from time import mktime
-from hmac import compare_digest
 from datetime import datetime, timedelta
+from hmac import compare_digest
+from time import mktime
+from uuid import uuid4
 
+import nacl.encoding
 import nacl.hash
 import nacl.pwhash
-import nacl.encoding
-
 import tornado.gen
+from tornado.gen import Return
+from tornado.web import MissingArgumentError
 
 from .base import BaseHandler
 
@@ -43,21 +44,22 @@ class TokenBaseHandler(BaseHandler):
 
         # Send to user verify token as is
         tokens_dct['verify_token'] = verify_token
-        return tokens_dct
+        raise Return(tokens_dct)
 
 
 class TokenGetHandler(TokenBaseHandler):
 
     @tornado.gen.coroutine
     def post(self):
-        username = self.get_argument('username')
-        password = self.get_argument('password')
+        try:
+            username = self.get_argument('username')
+            password = self.get_argument('password')
+        except MissingArgumentError:
+            self.raise_error(400, 'Invalid arguments')
 
         user_dct = yield self.db.users.find_one({'username': username})
         if user_dct is None:
-            self.set_status(403)
-            self.finish()
-            return
+            self.raise_error(404, 'Not found')
 
         # Password verify
         try:
@@ -67,9 +69,7 @@ class TokenGetHandler(TokenBaseHandler):
                 tornado.escape.utf8(password)
             )
         except nacl.exceptions.InvalidkeyError:
-            self.set_status(403)
-            self.finish()
-            return
+            self.raise_error(403, 'Access denied')
 
         user_tokens = yield self.generate_token(username)
         self.write(user_tokens)

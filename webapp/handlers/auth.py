@@ -1,18 +1,18 @@
 # -*- coding: utf-8 -*-
 
 import base64
-from time import mktime
 from datetime import datetime
 from hmac import compare_digest
+from time import mktime
 
+import nacl.encoding
+import nacl.exceptions
 import nacl.hash
 import nacl.pwhash
 import nacl.signing
-import nacl.encoding
-import nacl.exceptions
-
 import tornado.gen
 import tornado.web
+from tornado.web import MissingArgumentError
 
 from .base import BaseHandler
 
@@ -27,17 +27,15 @@ class TokenAuthHandler(BaseHandler):
 
     @tornado.gen.coroutine
     def prepare(self):
+        super(TokenAuthHandler, self).prepare()
         now = mktime(datetime.now().utctimetuple())
 
-        if not self.get_arguments('select_token'):
+        try:
+            select_token = self.get_argument('select_token')
+            verify_token = self.get_argument('verify_token')
+        except MissingArgumentError:
             self.current_user = None
-            return
-        elif not self.get_arguments('verify_token'):
-            self.current_user = None
-            return
-
-        select_token = self.get_argument('select_token')
-        verify_token = self.get_argument('verify_token')
+            self.raise_error(400, 'Invalid arguments')
 
         # Get user's data from db
         user_dct = yield self.db.users.aggregate([
@@ -97,17 +95,17 @@ class SignupHandler(BaseHandler):
 
     @tornado.gen.coroutine
     def post(self):
-
-        username = self.get_argument('username')
-        password = self.get_argument('password')
-        pubkey_hex = self.get_argument('pubkey_hex')
+        try:
+            username = self.get_argument('username')
+            password = self.get_argument('password')
+            pubkey_hex = self.get_argument('pubkey_hex')
+        except MissingArgumentError:
+            self.raise_error(400, 'Invalid arguments')
 
         # Check does user already have account
         user_dct = yield self.db.users.find_one({'username': username})
         if user_dct is not None:
-            self.set_status(403)
-            self.finish()
-            return
+            self.raise_error(400, 'Username taken')
 
         password_hash = yield self.executor.submit(
             nacl.pwhash.str,
@@ -120,4 +118,4 @@ class SignupHandler(BaseHandler):
             'pubkey_hex': tornado.escape.utf8(pubkey_hex)
         }
         yield self.db.users.insert(user_dct)
-        self.set_status(200)
+        self.raise_error(201, 'Created')
